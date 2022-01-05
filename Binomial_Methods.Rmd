@@ -1,0 +1,467 @@
+---
+title: "Binomial Methods Guide"
+output: 
+  html_document:
+    theme: cerulean
+    code_folding: hide
+    # toc: true
+    # toc_float: true
+---
+
+```{r setup, include=FALSE}
+
+#############
+# LIBRARIES #
+#############
+
+library(tidyverse)
+library(mosaic)
+library(car)
+library(pander)
+```
+
+### Introduction
+
+* The purpose of this guide is to provide adequate examples and explanation to why profile likelihood techniques are helpful in increasing reliability in confidence based intervals. While going through this document, one will be able to input numbers and observe comparisons between Profile Likelihood and Wald confidence intervals and power.
+
+* To begin, it will be important to remember that the following examples are based on one sample proportion testing.  The single proportion (or one-sample) binomial test is used to compare a proportion of responses or values in a sample of data to a (hypothesized) proportion in the population from which a sample data are drawn.  This is important because we seldom have access to data from an entire population.
+
+* Profile Likelihood testing becomes most vital when the traditional requirements for one-sample proportion testing are not met, which are:
+**( *n* being the number of trials, and *p-hat* being the observed proportion.)**
+
+$$
+\text{n}*\hat{p} \geq 5 \\\text{and}\\\ \text{n}*(1 - \hat{p}) \geq 5
+$$
+
+* The profile likelihood method is able to maximize the observed sample and thus create bounds that better explain probability when the number of successes over total trials get closer to both 0 and 1.  The equation of profile likelihood will be provided later on along with other helpful steps.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+
+#####################
+# INPUT VALUES HERE #
+#####################
+
+# Number of Trials
+nTrials = 11
+
+# Number of Successes
+xResult = 4
+
+# Alpha level
+alpha = 0.05
+
+# Hypothesized P
+p_H0 = 0.90
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+
+#############################
+# Wald Confidence Intervals #
+#############################
+
+# CREATE VECTORS TO STORE NUMBERS
+p_array = vector('numeric')
+UCL = vector("numeric")
+LCL = vector('numeric')
+
+# CREATE WALD CONFIDENCE INTERVALS
+xS = 0:nTrials
+for (i in xS) {
+  p_star = i/nTrials
+  if (p_star == 0) p_star = 0
+  if (p_star == 1) p_star = 1
+  p_array[i + 1] = p_star
+  se = sqrt(p_star * (1 - p_star)/nTrials)
+  sd = se * qnorm(1 - (alpha/2))
+
+  UCL[i + 1] = p_star + sd
+  #if (UCL[i + 1] > 1) {
+  #    (UCL[i + 1] = 1)
+  #}
+  LCL[i + 1] = p_star - sd
+  # if (LCL[i + 1] < 0) {
+  #     (LCL[i + 1] = 0)
+  # 
+  #   }
+}
+
+# HERE IS A TABLE OF THE INTERVALS ACCORDING TO 
+# NUMBER OF SUCCESSES.
+ walds_bounds = data.frame(UCL, LCL) %>% mutate("success" = 0:nTrials) %>% select(c("success", LCL, UCL))
+
+# plot(xS, p_array, type = "l", col = "black", pch = 20,
+#      main = "Confidence Bounds With No Bias Correction",
+#      xlab = "Number of Successes",
+#      ylab = "P",
+#      las = 1,
+#      ylim = c(-0.1,1.1),
+#      xaxp = c(0, nTrials, nTrials ))
+# 
+# lines(xS, LCL, col = "orange", lty = 2, lwd = 2)
+# 
+# lines(xS, UCL, col = "orange", lty = 2, lwd = 2)
+# grid(nx = NULL, ny = NULL, col = "lightgray", lty = "dotted")
+
+
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+
+################################
+# Profile Likelihood Intervals #
+################################
+
+upper = vector('numeric')
+lower = vector('numeric')
+xTemp = xResult
+
+# THIS IS THE LOGLIKE FUNCTION THAT WILL BE USED
+# INSIDE THE PROFILE LIKELIHOOD EQUATION.
+loglike <- function(p){
+  if (xTemp == 0) {
+    res = (nTrials - xTemp) * log(1 - p)
+  }
+  else if (xTemp == nTrials) {
+    res = xTemp * log(p)
+  }
+  else {
+    res = xTemp * log(p) + (nTrials - xTemp) * log(1 - p)
+  }
+}
+
+for (i in 0:nTrials) {
+  p_hat = (i/nTrials)
+  xTemp = i
+  zero = loglike(p_hat) - .5 * qchisq(1 - alpha, 1)
+  f = function(p) loglike(p) - zero
+  
+  if (i/nTrials == 0) {
+    upper[i + 1] = 0
+    p_U = uniroot(f, interval = c(p_hat,1))
+    lower[i + 1] = p_U$root
+    }
+  else if (i/nTrials == 1) {
+    lower[i + 1] = 1
+    p_L = uniroot(f, interval = c(0,p_hat))
+    upper[i + 1] = p_L$root
+  }
+  else {
+    p_U = uniroot(f, interval = c(0,p_hat))
+    upper[i + 1] = p_U$root
+    p_L = uniroot(f, interval = c(p_hat,1))
+    lower[i + 1] = p_L$root
+  }
+}
+
+# HERE IS A TABLE OF THE INTERVALS ACCORDING TO 
+# NUMBER OF SUCCESSES.
+profile_bounds = data.frame(upper, lower) %>% mutate("success" = 0:nTrials) %>% select(c("success", upper, lower))
+
+```
+
+### Variables
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+
+# THIS CHUNK OF CODE WAS TO CREATE A TABLE FOR THE
+# PRE-DECIDED VARIABLES.
+# THIS CODE IS ONLY IMPORTANT FOR THE HTML FILE.
+
+start = data.frame(nTrials, xResult, alpha, p_H0)
+start = start %>% rename(NumSuccess = xResult, NumTrials = nTrials, "Hypothesized P" =  p_H0)
+pander(start)
+```
+
+### Confidence Intervals
+
+## {.tabset .tabset-fade}
+
+### Graph
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+
+# THIS R-CHUNK IS WHERE THE FIRST VISUAL IS CREATE OF
+# THE CONFIDENCE BOUNDS FOR BOTH PROFILE LIKELIHOOD AND WALD.
+plot(xS, p_array, type = "l", col = "black", pch = 20,
+     main = "Confidence Bounds With No Bias Correction",
+     xlab = "Number of Successes",
+     ylab = "P",
+     las = 1,
+     ylim = c(-0.1,1.1),
+     xaxp = c(0, nTrials, nTrials ))
+
+lines(xS, LCL, col = "orange", lty = 2, lwd = 2)
+
+lines(xS, UCL, col = "orange", lty = 2, lwd = 2)
+grid(nx = NULL, ny = NULL, col = "lightgray", lty = "dotted")
+
+lines(xS, upper, col = "skyblue", lty = 2, lwd = 2)
+
+lines(xS, lower, col = "skyblue", lty = 2, lwd = 2)
+grid(nx = NULL, ny = NULL, col = "lightgray", lty = "dotted")
+
+#abline(v = xResult, col = "red", lty = "dashed")
+
+legend(x = 0, y = 1, c(paste(((1 - alpha) * 100),"%, Cl Profile Likelihood"), paste(((1 - alpha) * 100),"%, CL Wald")),
+       cex = 1, col = c("skyblue","orange"), pch = c(16,16))
+
+```
+
+### Explanation
+
+The confidence interval is a tool for estimating E{Y}, the “true” average y-value for a given x-value.  This allows us to make better predictions with decided levels of certain at a given point.  
+The way we interpret confidence intervals is unique and may require some practice.  If we were to decide to create confidence intervals of 90% around a given function, we would say, "We are 90% certain that 90% of random samples contain the true population parameter".
+In this guide, the focus is on two different types of confidence intervals, the Wald and Profile Likelihood.
+
+#### Wald Confidence Interval
+
+The Wald interval is the most basic confidence interval for proportions. Wald interval relies a lot on normal approximation assumption of binomial distribution and there are no modifications or corrections that are applied. It is the most direct confidence interval that can be constructed from this normal approximation.
+
+$$
+  {p^*} \pm \space{Z_{(1-(\alpha/2)}} * {\sqrt{({p^*} (1 - {p^*}) / n)}}
+$$
+
+#### Profile Likelihood Interval
+
+Profile likelihood is often used when accurate interval estimates are difficult to obtain using standard methods.  In cases where the likelihood function is not symmetric about the MLE, the Profile Likelihood Based Confidence Interval serves better.  This is because it is based on the asymptotic chi-square distribution of the log likelihood ratio test statistic.  
+
+Listed below are both the overall equation and the likelihood function.
+
+$$
+W = 2\space \text{log}(\text{likelihood}({p^*}))/\space\text{likelihood}(p))\leq \chi_{1-\alpha}^2
+$$
+
+##### Likelihood Equation
+
+$$
+\text{function(likelihood)} = \text{nSuccesses} * \text{log}(p) + (\text{nTrials} - \text{nSuccesses}) * \text{log}(1 - p)
+$$
+
+#
+
+### Interval Bounds at (x) Successes
+
+## {.tabset .tabset-fade}
+
+### Graph
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+
+############################################
+# Interval Bounds - For Profile Likelihood #
+############################################
+# THE ONLY DIFFERENCE BETWEEN THIS R-CHUNK AND THE 
+# R-CHUNK WHERE THE PROFILE_LIKELIHOOD IS MADE IS THAT HERE,
+# WE ARE ONLY FOCUSED ON (ONE) PROPORTION AND KNOWING HOW THE 
+# BOUNDS WERE CHOSEN.
+
+new_xResult = xResult
+new_p_hat = (new_xResult/nTrials)
+
+loglike_new <- function(p){
+  if (new_xResult == 0) {
+    res = (nTrials - new_xResult) * log(1 - p)
+  }
+  else if (new_xResult == nTrials) {
+    res = new_xResult * log(p)
+  }
+  else {
+    res = new_xResult * log(p) + (nTrials - new_xResult) * log(1 - p)
+  }
+}
+
+new_zero = loglike_new(new_p_hat) - .5 * qchisq(1 - alpha, 1)
+new_b = function(a) loglike_new(a) - new_zero
+p_s = seq(0, 1, by = 0.02)
+new_y_value = new_b(p_s)
+
+plot(new_y_value ~ p_s,
+     main = paste("Profile Interval Bounds\nnTrials =",  nTrials,", Number of Successes =", xResult,",\nProbability for =", round((xResult/nTrials), 2), sep = " "),
+     xlab = "Probability p",
+     ylab = "")
+curve(new_b, add = TRUE)
+grid(nx = NULL, ny = NULL, col = "lightgray", lty = "dotted")
+abline(h = 0, col = "blue")
+
+lines = filter(profile_bounds, success == xResult)
+
+abline(v = lines[1,2], col = "red", lty = "dashed")
+abline(v = lines[1,3], col = "red", lty = "dashed")
+text((lines[1,2] + 0.05), -9, paste(round(lines[1,2],2)))
+text((lines[1,3] - 0.05), -9, paste(round(lines[1,3],2)))
+
+```
+
+### Explanation
+
+The graph produced illustrates how confidence intervals are created for each x (number of successes) for a Profile Likelihood Confidence Interval.  The upper and lower bounds are discovered where ever the function crosses 0.  What is unique about this processes is the use of the Chi-square distribution.  We are able to make such a statement because of the testing that appear in the following graphs below.
+
+It is unique how Profile Likelihood creates its bounds as the number of successes get closer to 0 and 1.  Unlike Wald Intervals that dive either to 0 or 1.0 at the ends, Profile Likelihood allows room for chance to occur.
+
+#
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+
+#########
+# POWER #
+#########
+
+# THE BIGGER THESE TWO NUMBERS ARE, 
+# THE SMOOTHER THE GRAPH WILL APPEAR.
+nsample = 1100
+num = 400
+
+p_support = vector('numeric')
+p_support = seq(from = 0, to = 1, length.out = num)
+new = vector('numeric')
+r_frame = vector('numeric')
+
+# THE CODE BELOW IS VERY IMPORTANT!
+# USING A BIONOMIAL DISTRIBUTION, WE ARE SELECTING NUMBERS,
+# BETWEEN 0 AND NTRIALS FOR EACH PROBABILITY CREATED IN
+# P_SUPPORT. 
+# THIS WILL BE CALLED: dat
+
+for (i in 1:length(p_support)) {
+  s = (rbinom(size = nTrials, n = nsample, prob = p_support[i]))
+  new[i] = data.frame(s)
+  r_frame = data.frame(new)
+}
+dat = t(r_frame)
+rownames(dat) <- NULL
+
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+
+# 'LOOK' WAS CREATED TO COMBINE BOTH dat AND p_support
+# TOGETHER AND THEN MAKE IT INTO A MATRIX.
+
+look = data.frame(p_support,dat)
+look = as.matrix(look)
+
+# THIS ARE ARE MORE NUMBER HOLDERS.
+final_profile_power = rep(NA,num)
+final_walds_power = rep(NA,num)
+final_pframe = rep(NA,num)
+final_wframe = rep(NA,num)
+
+# THIS CODE BELOW IS WHERE THE BOTH POWER OF TEST AND CONFIDENCE OF TEST IS DONE.
+# THE RESULTS FROM THIS FOR LOOP ARE COUNTS OF TRUE AND FALSE.
+for (i in 1:length(p_support)) {
+  final_profile_power[i]  = sum(profile_bounds[look[i,2:ncol(look)] + 1, 2] <= p_H0 & p_H0 <= profile_bounds[look[i,2:ncol(look)] + 1, 3])
+  final_walds_power[i]  = sum(walds_bounds[look[i,2:ncol(look)] + 1, 2] <= p_H0 & p_H0 <= walds_bounds[look[i,2:ncol(look)] + 1, 3])
+
+  final_pframe[i] =  sum(profile_bounds[look[i,2:ncol(look)] + 1, 2] <= look[i, 1] & look[i, 1] <= profile_bounds[look[i,2:ncol(look)] + 1, 3])
+  final_wframe[i] =  sum(walds_bounds[look[i,2:ncol(look)] + 1, 2] <= look[i, 1] & look[i, 1] <= walds_bounds[look[i,2:ncol(look)] + 1, 3])
+}
+
+# THESE FOUR LINES ARE TAKING THE SUM OF COUNTS AND
+# DIVIDING THEM BY nsample
+final_profile_power = 1 - final_profile_power/nsample
+final_walds_power = 1 - final_walds_power/nsample
+
+final_pframe = final_pframe/nsample
+final_wframe = final_wframe/nsample
+```
+
+
+### Confidence of The Test
+
+## {.tabset .tabset-fade}
+
+### Graph
+
+```{r, warning=FALSE, message= FALSE, echo = FALSE}
+
+confidence_profile = data.frame(p_support, final_pframe)
+confidence_walds = data.frame(p_support, final_wframe)
+
+ggplot() +
+  geom_line(data = confidence_profile, aes(x = p_support, y = final_pframe, color = "Profile Likelihood")) +
+  geom_line(data = confidence_walds, aes(x = p_support, y = final_wframe, color = "Wald")) + 
+  ggtitle( paste( "Confidence of the Test,", nTrials, "Trials\n", "alpha =", alpha)) +
+  theme_bw() +
+  labs(x = "Probability of Success",
+       y = "Confidence",
+       color = "Type of Confidence Test") +
+  geom_hline(yintercept = (1 - alpha), linetype = "dashed", color = "red") + 
+  scale_color_manual(values = c("Profile Likelihood" = "skyblue", "Wald" = "orange")) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.caption = element_text(hjust = 0.5)) +
+  scale_y_continuous(breaks = seq(0,1.00,.10))
+
+```
+
+### Explanation
+
+This last plot illustrates the performance of the two confidence interval types.  The closer the confidence interval is to the red dashed line, the more assured we are that our confidence intervals remain reliable for all probabilities.  The Wald Confidence as seen in the plot, does not remain near the line as the probabilities get closer to 0 and 1.  This lets us know that if we want to be (1 - alpha)% confident, we would do best choosing the Profile Likelihood Test over Wald.
+
+#
+
+
+
+### Power of the Test
+
+## {.tabset .tabset-fade}
+
+### Graph
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+
+###################
+# GRAPHS ON POWER #
+###################
+
+complete_power = data.frame(p_support, final_profile_power)
+complete_walds = data.frame(p_support, final_walds_power)
+
+# THESE NEXT FEW LINES ARE WHERE WE DISCOVER THE POWER BASED ON 
+# THE p_H0.  IT IS THEN SAVED INTO A VARIABLE FOR GRAPH USE LATER.
+pro_line = complete_power %>% filter(final_profile_power > (p_H0 - .00000000001))  %>% select(p_support, final_profile_power)
+pro_line = pro_line %>% filter(final_profile_power == min(pro_line$final_profile_power))
+x_value = pro_line[1,1]
+###
+wald_line = complete_walds %>% filter(final_walds_power > (p_H0 - .00000000001))  %>% select(p_support, final_walds_power)
+wald_line = wald_line %>% filter(final_walds_power == min(wald_line$final_walds_power))
+wald_x_value = wald_line[1,1]
+
+ggplot() +
+  geom_line(data = complete_power, aes(x = p_support, y = final_profile_power, color = "Profile Likelihood")) +
+  geom_line(data = complete_walds, aes(x = p_support, y = final_walds_power, color = "Wald Interval")) +
+  theme_bw() +
+  labs(x = "Probability, p",
+       y = "Power",
+       caption = "Power is the probability of rejecting the null hypothesis H0 when the alternative hypothesis is true.",
+       color = "Type of Confidence Interval")  + 
+  ggtitle( paste( "Power of the Test,", nTrials, "Trials\n", "alpha =", alpha,", p_H0 =", p_H0)) +
+  geom_hline(yintercept = p_H0, linetype = "dashed", color = "black") + 
+  geom_vline(xintercept = x_value, linetype = "dashed", color = "skyblue") +
+  geom_vline(xintercept = wald_x_value, linetype = "dashed", color = "orange") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.caption = element_text(hjust = 0.5)) +
+  scale_y_continuous(breaks = seq(0,1.00,.10)) + 
+  scale_color_manual(values = c("Profile Likelihood" = "skyblue", "Wald Interval" = "orange")) + 
+  annotate(geom = "text", x = 0.05, y = 0.07, label = (round(x_value,2)), col = "skyblue") +
+  annotate(geom = "text", x = 0.05, y = 0.02, label = (round(wald_x_value,2)), col = "orange")
+
+```
+
+### Explanation
+
+As printed in the caption below the visual, Power is the probability of rejecting the null hypothesis H0 when the alternative hypothesis is true.
+The power of a hypothesis test is between 0 and 1; if the power is close to 1, the hypothesis test is very good at detecting a false null hypothesis.
+
+The graph shown in this section shows the power of each type of confidence interval for a hypothesized p (p_H0).  What we are looking for is the type of interval that has the largest power, which turns out to be Profile Likelihood.
+
+#
+
+
+```{r}
+#https://towardsdatascience.com/five-confidence-intervals-for-proportions-that-you-should-know-about-7ff5484c024f
+```
+
+
